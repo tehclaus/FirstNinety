@@ -53,8 +53,9 @@ async function handle(raw: string) {
   const { data: hire } = await db().from("live_hires").select("id,name").eq("id", hireId).single();
   if (!hire) return;
 
-  const { data: existing } = await db().from("live_checkpoints").select("answers").eq("hire_id", hireId).eq("day", day).maybeSingle();
-  const answers: Record<string, number> = { ...((existing?.answers as Record<string, number>) ?? {}), [key]: v };
+  // Insert-only log of every answer → no lost updates when clicks arrive in parallel.
+  await db().from("live_events").insert({ hire_id: hireId, channel: "slack", action: `Day ${day} pulse answer`, target: key, preview: String(v), status: "ok" });
+  const answers = await answersFor(hireId, day);
   const completed = pulseQuestions.every((q) => answers[q.key] !== undefined);
   const flag = completed ? flagFromAnswers(answers) : null;
 
@@ -82,4 +83,12 @@ async function handle(raw: string) {
     }
   }
   return;
+}
+
+async function answersFor(hireId: string, day: number) {
+  const { data } = await db().from("live_events").select("target,preview,created_at")
+    .eq("hire_id", hireId).eq("action", `Day ${day} pulse answer`).order("created_at", { ascending: true });
+  const answers: Record<string, number> = {};
+  for (const r of data ?? []) if (r.target) answers[r.target] = Number(r.preview);
+  return answers;
 }

@@ -1,6 +1,7 @@
 import { isLiveAuthed } from "@/lib/server/auth";
 import { db, liveConfigured, type LiveCheckpoint, type LiveEvent, type LiveHire } from "@/lib/server/supabase";
 import { templateByKey } from "@/lib/templates";
+import { flagFromAnswers } from "@/lib/server/slack";
 import { FlagBadge, PageHeader } from "@/components/ui";
 import type { Flag } from "@/lib/types";
 import { LaunchForm, LoginForm } from "./Forms";
@@ -30,7 +31,7 @@ export default async function LivePage() {
 
   const [{ data: hires, error }, { data: events }, { data: cps }] = await Promise.all([
     db().from("live_hires").select("*").order("created_at", { ascending: false }).limit(20),
-    db().from("live_events").select("*").order("created_at", { ascending: false }).limit(200),
+    db().from("live_events").select("*").order("created_at", { ascending: false }).limit(1000),
     db().from("live_checkpoints").select("*"),
   ]);
 
@@ -61,7 +62,18 @@ export default async function LivePage() {
       <div className="space-y-4">
         {(hires as LiveHire[] | null)?.map((h) => {
           const ev = (events as LiveEvent[] | null)?.filter((e) => e.hire_id === h.id) ?? [];
-          const cp = (cps as LiveCheckpoint[] | null)?.filter((c) => c.hire_id === h.id) ?? [];
+          const stored = (cps as LiveCheckpoint[] | null)?.filter((c) => c.hire_id === h.id) ?? [];
+          // Derive answers from the insert-only answer log (source of truth), fall back to stored checkpoint.
+          const cp = [30, 60, 90].flatMap((d) => {
+            const rows = ev.filter((e) => e.action === `Day ${d} pulse answer`).sort((a, b) => a.created_at.localeCompare(b.created_at));
+            const base = stored.find((c) => c.day === d);
+            if (!rows.length && !base) return [];
+            const answers: Record<string, number> = { ...(base?.answers ?? {}) };
+            for (const r of rows) if (r.target) answers[r.target] = Number(r.preview);
+            const completed = ["clarity", "support", "workload", "enps"].every((k) => answers[k] !== undefined);
+            return [{ id: base?.id ?? d, hire_id: h.id, day: d as 30 | 60 | 90, answers, completed, flag: completed ? flagFromAnswers(answers) : null, updated_at: "" }];
+          });
+          const log = ev.filter((e) => !e.action.endsWith("pulse answer"));
           return (
             <section key={h.id} className="card p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -96,7 +108,7 @@ export default async function LivePage() {
               )}
 
               <ul className="mt-4 divide-y divide-line text-sm">
-                {ev.map((e) => (
+                {log.map((e) => (
                   <li key={e.id} className="flex gap-3 py-2">
                     <span className={e.status === "ok" ? "text-good" : e.status === "error" ? "text-crit" : "text-muted"}>{e.status === "ok" ? "✓" : e.status === "error" ? "✕" : "–"}</span>
                     <span className="flex-1">{e.action}{e.error && <span className="text-crit"> — {e.error}</span>}</span>
