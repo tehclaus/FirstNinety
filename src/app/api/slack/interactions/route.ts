@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { db, logEvent } from "@/lib/server/supabase";
 import { flagFromAnswers, pulseBlocks, pulseQuestions, slack, verifySlackSignature } from "@/lib/server/slack";
 
@@ -10,24 +11,47 @@ type Payload = {
   actions?: Action[];
 };
 
+export const maxDuration = 30;
+
+/** Safe diagnostics — no secret values, only whether they are present. */
+export async function GET() {
+  const secret = process.env.SLACK_SIGNING_SECRET ?? "";
+  return Response.json({
+    route: "ok",
+    signingSecretSet: Boolean(secret),
+    signingSecretLooksValid: /^[a-f0-9]{32}$/.test(secret.trim()),
+    signingSecretHasWhitespace: secret !== secret.trim(),
+    botTokenSet: Boolean(process.env.SLACK_BOT_TOKEN),
+    supabaseSet: Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SECRET_KEY),
+  });
+}
+
 export async function POST(req: Request) {
   const raw = await req.text();
-  if (!verifySlackSignature(raw, req.headers.get("x-slack-request-timestamp"), req.headers.get("x-slack-signature"))) {
+  const ts = req.headers.get("x-slack-request-timestamp");
+  if (!verifySlackSignature(raw, ts, req.headers.get("x-slack-signature"))) {
+    after(() => logEvent({ hire_id: null, channel: "slack", action: "Slack button click rejected", target: "/api/slack/interactions", preview: null, status: "error", error: `Signature check failed (timestamp ${ts ?? "missing"}). Check SLACK_SIGNING_SECRET.` }));
     return new Response("invalid signature", { status: 401 });
   }
+  // Acknowledge within Slack's 3-second window; do the work afterwards.
+  after(() => handle(raw).catch((e) => logEvent({ hire_id: null, channel: "slack", action: "Slack button handler failed", target: "/api/slack/interactions", preview: null, status: "error", error: String(e?.message ?? e) })));
+  return new Response("", { status: 200 });
+}
+
+async function handle(raw: string) {
   const payload = JSON.parse(new URLSearchParams(raw).get("payload") ?? "{}") as Payload;
-  if (payload.type !== "block_actions" || !payload.actions?.length) return new Response("", { status: 200 });
+  if (payload.type !== "block_actions" || !payload.actions?.length) return;
 
   const action = payload.actions[0];
   const value = action.value ?? action.selected_option?.value;
-  if (!value || !action.action_id.startsWith("pulse_")) return new Response("", { status: 200 });
+  if (!value || !action.action_id.startsWith("pulse_")) return;
 
   const [hireId, dayStr, key, vStr] = value.split("|");
   const day = Number(dayStr);
   const v = Number(vStr);
 
   const { data: hire } = await db().from("live_hires").select("id,name").eq("id", hireId).single();
-  if (!hire) return new Response("", { status: 200 });
+  if (!hire) return;
 
   const { data: existing } = await db().from("live_checkpoints").select("answers").eq("hire_id", hireId).eq("day", day).maybeSingle();
   const answers: Record<string, number> = { ...((existing?.answers as Record<string, number>) ?? {}), [key]: v };
@@ -57,5 +81,5 @@ export async function POST(req: Request) {
       await slack("chat.update", { channel, ts, text: `Day ${day} check-in`, blocks: pulseBlocks(hireId, first, day, answers) });
     }
   }
-  return new Response("", { status: 200 });
+  return;
 }

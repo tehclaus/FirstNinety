@@ -27,14 +27,14 @@ export interface LiveHire {
   plan: { tasks?: unknown[]; meetings?: unknown[]; goals?: unknown[] };
 }
 export interface LiveEvent {
-  id: number; created_at: string; hire_id: string; channel: string; action: string; target: string | null;
+  id: number; created_at: string; hire_id: string | null; channel: string; action: string; target: string | null;
   preview: string | null; status: "ok" | "error" | "skipped"; error: string | null;
 }
 export interface LiveCheckpoint {
   id: number; hire_id: string; day: 30 | 60 | 90; answers: Record<string, number>; flag: string | null; completed: boolean; updated_at: string;
 }
 
-export async function logEvent(e: Omit<LiveEvent, "id" | "created_at" | "error" | "status"> & { status?: LiveEvent["status"]; error?: string | null }) {
+export async function logEvent(e: Omit<LiveEvent, "id" | "created_at" | "error" | "status" | "hire_id"> & { hire_id: string | null } & { status?: LiveEvent["status"]; error?: string | null }) {
   const { error } = await db().from("live_events").insert({ status: "ok", ...e });
   if (error) console.error("logEvent failed", error.message);
 }

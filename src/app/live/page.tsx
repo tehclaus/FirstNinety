@@ -38,6 +38,23 @@ export default async function LivePage() {
     <>
       <PageHeader title="Live mode" subtitle="Real Supabase records and real Slack messages. Visible only to you." />
       {error && <p className="card mb-4 p-4 text-sm text-crit">Supabase error: {error.message}. Did you run supabase/schema.sql?</p>}
+      {(() => {
+        const sys = ((events as LiveEvent[] | null) ?? []).filter((e) => !e.hire_id).slice(0, 5);
+        return sys.length > 0 && (
+          <section className="card mb-6 border-l-4 border-l-warn p-4">
+            <h2 className="text-sm font-semibold">System events</h2>
+            <ul className="mt-2 space-y-1 text-sm">
+              {sys.map((e) => (
+                <li key={e.id} className="flex gap-3">
+                  <span className="text-crit">✕</span>
+                  <span className="flex-1">{e.action}{e.error && <span className="text-ink-2"> — {e.error}</span>}</span>
+                  <span className="text-xs text-muted"><LocalTime iso={e.created_at} /></span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        );
+      })()}
       <LaunchForm />
 
       <h2 className="mb-3 mt-8 text-xs font-medium uppercase tracking-wide text-ink-2">Live hires · {hires?.length ?? 0}</h2>
