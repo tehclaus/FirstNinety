@@ -4,7 +4,8 @@ import { templateByKey } from "@/lib/templates";
 import { FlagBadge, PageHeader } from "@/components/ui";
 import type { Flag } from "@/lib/types";
 import { LaunchForm, LoginForm } from "./Forms";
-import { deleteHireAction, sendPulseAction } from "./actions";
+import { deleteHireAction } from "./actions";
+import { PulseButton } from "./PulseButton";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Live mode — Ramp90", robots: { index: false } };
@@ -51,12 +52,11 @@ export default async function LivePage() {
                   <div className="text-sm text-ink-2">{h.grade} {templateByKey(h.template).role} · {h.location} ({h.work_mode}) · starts {h.start_date} · manager {h.manager} · buddy {h.buddy}</div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {[30, 60, 90].map((d) => (
-                    <form key={d} action={sendPulseAction}>
-                      <input type="hidden" name="hireId" value={h.id} /><input type="hidden" name="day" value={d} />
-                      <button className="rounded-lg border border-line px-3 py-1.5 text-xs hover:bg-surface-2" disabled={!h.email}>Send day {d} pulse</button>
-                    </form>
-                  ))}
+                  {[30, 60, 90].map((d) => {
+                    const sent = ev.find((e) => e.action === `Day ${d} pulse survey sent` && e.status === "ok");
+                    const done = cp.find((c) => c.day === d && c.completed);
+                    return <PulseButton key={d} hireId={h.id} day={d} disabled={!h.email} lastSentAt={sent?.created_at} answered={done?.flag} />;
+                  })}
                   <form action={deleteHireAction}>
                     <input type="hidden" name="hireId" value={h.id} />
                     <button className="rounded-lg px-3 py-1.5 text-xs text-crit hover:bg-crit-soft">Delete</button>

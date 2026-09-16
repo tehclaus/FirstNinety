@@ -5,6 +5,9 @@ import { isLiveAuthed, tryLogin } from "@/lib/server/auth";
 import { db, logEvent } from "@/lib/server/supabase";
 import { dmByEmail, pulseBlocks, slack } from "@/lib/server/slack";
 
+const humanDate = (iso: string) =>
+  new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+
 export type ActionState = { ok?: boolean; message?: string; steps?: { label: string; ok: boolean; detail?: string }[] };
 
 export async function loginAction(_: ActionState, fd: FormData): Promise<ActionState> {
@@ -46,14 +49,14 @@ export async function launchHireAction(_: ActionState, fd: FormData): Promise<Ac
 
   // 1. #welcome post
   const channel = process.env.SLACK_WELCOME_CHANNEL || "#welcome";
-  const welcomeText = `🎉 Please welcome *${f.name}*, joining as ${f.grade} ${role} in ${f.location} on ${f.start}! Manager: ${f.manager} · Buddy: ${f.buddy}. Say hi 👋`;
+  const welcomeText = `🎉 Please welcome *${f.name}*, joining as ${f.grade} ${role} in ${f.location} on ${humanDate(f.start)}! Manager: ${f.manager} · Buddy: ${f.buddy}. Say hi 👋`;
   const w = await slack("chat.postMessage", { channel, text: welcomeText });
   steps.push({ label: `Welcome posted in ${channel}`, ok: w.ok, detail: w.error });
   await logEvent({ hire_id: hire.id, channel: "slack", action: `Posted welcome in ${channel}`, target: channel, preview: welcomeText, status: w.ok ? "ok" : "error", error: w.error ?? null });
 
   // 2. Buddy DM
   if (buddyEmail) {
-    const text = `👋 You're ${first}'s onboarding buddy! ${first} joins as ${role} on ${f.start}. A coffee chat is planned for Day 1 at 14:00. Tip: share one thing you wish you'd known in your first week.`;
+    const text = `👋 You're ${first}'s onboarding buddy! ${first} joins as ${role} on ${humanDate(f.start)}. A coffee chat is planned for Day 1 at 14:00. Tip: share one thing you wish you'd known in your first week.`;
     const r = await dmByEmail(buddyEmail, text);
     steps.push({ label: `Buddy intro DM to ${f.buddy}`, ok: r.ok, detail: r.error });
     await logEvent({ hire_id: hire.id, channel: "slack", action: "Sent buddy intro DM", target: buddyEmail, preview: text, status: r.ok ? "ok" : "error", error: r.error ?? null });
@@ -74,20 +77,34 @@ export async function launchHireAction(_: ActionState, fd: FormData): Promise<Ac
   return { ok: steps.every((s) => s.ok), steps, message: `${f.name} launched` };
 }
 
-export async function sendPulseAction(fd: FormData) {
-  if (!(await isLiveAuthed())) return;
+export type PulseState = { ok?: boolean; message?: string; at?: string };
+
+export async function sendPulseAction(_: PulseState, fd: FormData): Promise<PulseState> {
+  if (!(await isLiveAuthed())) return { ok: false, message: "Not authorised" };
   const hireId = String(fd.get("hireId"));
   const day = Number(fd.get("day") ?? 30);
+  const force = fd.get("force") === "1";
   const { data: hire } = await db().from("live_hires").select("id,name,email").eq("id", hireId).single();
-  if (!hire) return;
-  if (!hire.email) {
-    await logEvent({ hire_id: hireId, channel: "slack", action: `Day ${day} pulse not sent`, target: null, preview: null, status: "skipped", error: "No Slack email for this hire" });
-  } else {
-    const first = hire.name.split(" ")[0];
-    const r = await dmByEmail(hire.email, `Day ${day} check-in`, pulseBlocks(hireId, first, day, {}));
-    await logEvent({ hire_id: hireId, channel: "slack", action: `Day ${day} pulse survey sent`, target: hire.email, preview: "4 questions: clarity, support, workload, eNPS", status: r.ok ? "ok" : "error", error: r.error ?? null });
+  if (!hire) return { ok: false, message: "Hire not found" };
+  if (!hire.email) return { ok: false, message: "No Slack email for this hire" };
+
+  const actionName = `Day ${day} pulse survey sent`;
+  if (!force) {
+    const since = new Date(Date.now() - 10 * 60_000).toISOString();
+    const { data: recent } = await db().from("live_events").select("created_at")
+      .eq("hire_id", hireId).eq("action", actionName).eq("status", "ok").gte("created_at", since)
+      .order("created_at", { ascending: false }).limit(1);
+    if (recent?.length) {
+      const mins = Math.max(1, Math.round((Date.now() - new Date(recent[0].created_at).getTime()) / 60_000));
+      return { ok: false, message: `Already sent ${mins} min ago — waiting for answers`, at: recent[0].created_at };
+    }
   }
+
+  const first = hire.name.split(" ")[0];
+  const r = await dmByEmail(hire.email, `Day ${day} check-in`, pulseBlocks(hireId, first, day, {}));
+  await logEvent({ hire_id: hireId, channel: "slack", action: actionName, target: hire.email, preview: "4 questions: clarity, support, workload, eNPS", status: r.ok ? "ok" : "error", error: r.error ?? null });
   revalidatePath("/live");
+  return r.ok ? { ok: true, message: `Day ${day} pulse sent to ${first}`, at: new Date().toISOString() } : { ok: false, message: `Slack: ${r.error}` };
 }
 
 export async function deleteHireAction(fd: FormData) {
