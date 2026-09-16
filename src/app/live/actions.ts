@@ -101,8 +101,23 @@ export async function sendPulseAction(_: PulseState, fd: FormData): Promise<Puls
   }
 
   const first = hire.name.split(" ")[0];
+
+  // Retire earlier copies of this check-in so only the newest message accepts answers.
+  const { data: previous } = await db().from("live_events").select("target")
+    .eq("hire_id", hireId).eq("action", actionName).eq("status", "ok");
+  for (const p of previous ?? []) {
+    const [ch, ts] = String(p.target ?? "").split("|");
+    if (ch && ts) {
+      await slack("chat.update", { channel: ch, ts, text: "Replaced by a newer check-in", blocks: [
+        { type: "context", elements: [{ type: "mrkdwn", text: `_This day ${day} check-in was replaced by a newer one — please use the latest message below._` }] },
+      ] });
+    }
+  }
+
   const r = await dmByEmail(hire.email, `Day ${day} check-in`, pulseBlocks(hireId, first, day, {}));
-  await logEvent({ hire_id: hireId, channel: "slack", action: actionName, target: hire.email, preview: "4 questions: clarity, support, workload, eNPS", status: r.ok ? "ok" : "error", error: r.error ?? null });
+  const ch = (r.channel as string | undefined) ?? "";
+  const ts = (r.ts as string | undefined) ?? "";
+  await logEvent({ hire_id: hireId, channel: "slack", action: actionName, target: ch && ts ? `${ch}|${ts}` : hire.email, preview: "4 questions: clarity, support, workload, eNPS", status: r.ok ? "ok" : "error", error: r.error ?? null });
   revalidatePath("/live");
   return r.ok ? { ok: true, message: `Day ${day} pulse sent to ${first}`, at: new Date().toISOString() } : { ok: false, message: `Slack: ${r.error}` };
 }

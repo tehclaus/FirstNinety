@@ -65,13 +65,18 @@ export default async function LivePage() {
           const stored = (cps as LiveCheckpoint[] | null)?.filter((c) => c.hire_id === h.id) ?? [];
           // Derive answers from the insert-only answer log (source of truth), fall back to stored checkpoint.
           const cp = [30, 60, 90].flatMap((d) => {
-            const rows = ev.filter((e) => e.action === `Day ${d} pulse answer`).sort((a, b) => a.created_at.localeCompare(b.created_at));
+            const latest = ev.filter((e) => e.action === `Day ${d} pulse survey sent` && e.status === "ok")
+              .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+            const msgTs = String(latest?.target ?? "").split("|")[1];
+            const rows = ev.filter((e) => e.action === `Day ${d} pulse answer` && (msgTs ? String(e.target).startsWith(`${msgTs}:`) : true))
+              .sort((a, b) => a.created_at.localeCompare(b.created_at));
             const base = stored.find((c) => c.day === d);
-            if (!rows.length && !base) return [];
-            const answers: Record<string, number> = { ...(base?.answers ?? {}) };
-            for (const r of rows) if (r.target) answers[r.target] = Number(r.preview);
+            if (!rows.length && !(base && !msgTs)) return [];
+            const answers: Record<string, number> = rows.length ? {} : { ...(base?.answers ?? {}) };
+            for (const r of rows) answers[String(r.target).split(":").pop()!] = Number(r.preview);
             const completed = ["clarity", "support", "workload", "enps"].every((k) => answers[k] !== undefined);
-            return [{ id: base?.id ?? d, hire_id: h.id, day: d as 30 | 60 | 90, answers, completed, flag: completed ? flagFromAnswers(answers) : null, updated_at: "" }];
+            const at = rows.at(-1)?.created_at;
+            return [{ id: base?.id ?? d, hire_id: h.id, day: d as 30 | 60 | 90, answers, completed, flag: completed ? flagFromAnswers(answers) : null, updated_at: at ?? "" }];
           });
           const log = ev.filter((e) => !e.action.endsWith("pulse answer"));
           return (
@@ -98,7 +103,8 @@ export default async function LivePage() {
                 <div className="mt-4 flex flex-wrap gap-3">
                   {cp.sort((a, b) => a.day - b.day).map((c) => (
                     <div key={c.id} className="rounded-xl border border-line p-3 text-sm">
-                      <div className="flex items-center gap-2 font-medium">Day {c.day} {c.completed ? <FlagBadge flag={c.flag as Flag} /> : <span className="text-xs text-muted">in progress</span>}</div>
+                      <div className="flex items-center gap-2 font-medium">Day {c.day} {c.completed ? <FlagBadge flag={c.flag as Flag} /> : <span className="text-xs text-muted">in progress</span>}
+                        {c.updated_at && <span className="text-xs font-normal text-muted">{c.completed ? "answered" : "last answer"} <LocalTime iso={c.updated_at} /></span>}</div>
                       <div className="mt-1 text-xs text-ink-2 tabular-nums">
                         Clarity {c.answers.clarity ?? "–"}/5 · Support {c.answers.support ?? "–"}/5 · Workload {c.answers.workload ?? "–"}/5 · eNPS {c.answers.enps ?? "–"}/10
                       </div>

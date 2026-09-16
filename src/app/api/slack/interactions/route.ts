@@ -52,10 +52,33 @@ async function handle(raw: string) {
 
   const { data: hire } = await db().from("live_hires").select("id,name").eq("id", hireId).single();
   if (!hire) return;
+  const first = hire.name.split(" ")[0];
+  const channel = payload.container?.channel_id ?? payload.channel?.id;
+  const ts = payload.container?.message_ts;
+  if (!channel || !ts) return;
 
-  // Insert-only log of every answer → no lost updates when clicks arrive in parallel.
-  await db().from("live_events").insert({ hire_id: hireId, channel: "slack", action: `Day ${day} pulse answer`, target: key, preview: String(v), status: "ok" });
-  const answers = await answersFor(hireId, day);
+  // Only the newest copy of a check-in accepts answers.
+  const { data: latestSent } = await db().from("live_events").select("target")
+    .eq("hire_id", hireId).eq("action", `Day ${day} pulse survey sent`).eq("status", "ok")
+    .order("created_at", { ascending: false }).limit(1);
+  const latestTs = String(latestSent?.[0]?.target ?? "").split("|")[1];
+  if (latestTs && latestTs !== ts) {
+    await slack("chat.update", { channel, ts, text: "Replaced by a newer check-in", blocks: [
+      { type: "context", elements: [{ type: "mrkdwn", text: `_This day ${day} check-in was replaced by a newer one — please use the latest message._` }] },
+    ] });
+    return;
+  }
+
+  // Already submitted → lock, don't accept changes.
+  const before = await answersFor(hireId, day, ts);
+  if (pulseQuestions.every((q) => before[q.key] !== undefined)) {
+    await slack("chat.update", { channel, ts, text: "Check-in already submitted", blocks: thanksBlocks(first, day, before) });
+    return;
+  }
+
+  // Insert-only log of every answer (keyed by message) → no lost updates on fast clicks.
+  await db().from("live_events").insert({ hire_id: hireId, channel: "slack", action: `Day ${day} pulse answer`, target: `${ts}:${key}`, preview: String(v), status: "ok" });
+  const answers = await answersFor(hireId, day, ts);
   const completed = pulseQuestions.every((q) => answers[q.key] !== undefined);
   const flag = completed ? flagFromAnswers(answers) : null;
 
@@ -64,31 +87,26 @@ async function handle(raw: string) {
     { onConflict: "hire_id,day" },
   );
 
-  const channel = payload.container?.channel_id ?? payload.channel?.id;
-  const ts = payload.container?.message_ts;
-  const first = hire.name.split(" ")[0];
-  if (channel && ts) {
-    if (completed) {
-      await slack("chat.update", {
-        channel, ts,
-        text: "Thanks — check-in received",
-        blocks: [
-          { type: "section", text: { type: "mrkdwn", text: `🙌 Thanks, ${first}! Your day ${day} check-in is in. Your People Partner will follow up if anything needs attention.` } },
-          { type: "context", elements: [{ type: "mrkdwn", text: `Clarity ${answers.clarity}/5 · Support ${answers.support}/5 · Workload ${answers.workload}/5 · eNPS ${answers.enps}/10` }] },
-        ],
-      });
-      await logEvent({ hire_id: hireId, channel: "slack", action: `Day ${day} pulse completed → ${flag}`, target: `@${first.toLowerCase()}`, preview: JSON.stringify(answers) });
-    } else {
-      await slack("chat.update", { channel, ts, text: `Day ${day} check-in`, blocks: pulseBlocks(hireId, first, day, answers) });
-    }
+  if (completed) {
+    await slack("chat.update", { channel, ts, text: "Thanks — check-in received", blocks: thanksBlocks(first, day, answers) });
+    await logEvent({ hire_id: hireId, channel: "slack", action: `Day ${day} pulse completed → ${flag}`, target: `@${first.toLowerCase()}`, preview: JSON.stringify(answers) });
+  } else {
+    await slack("chat.update", { channel, ts, text: `Day ${day} check-in`, blocks: pulseBlocks(hireId, first, day, answers) });
   }
-  return;
 }
 
-async function answersFor(hireId: string, day: number) {
-  const { data } = await db().from("live_events").select("target,preview,created_at")
-    .eq("hire_id", hireId).eq("action", `Day ${day} pulse answer`).order("created_at", { ascending: true });
+function thanksBlocks(first: string, day: number, a: Record<string, number>) {
+  return [
+    { type: "section", text: { type: "mrkdwn", text: `🙌 Thanks, ${first}! Your day ${day} check-in is in. Your People Partner will follow up if anything needs attention.` } },
+    { type: "context", elements: [{ type: "mrkdwn", text: `Clarity ${a.clarity}/5 · Support ${a.support}/5 · Workload ${a.workload}/5 · eNPS ${a.enps}/10 · submitted answers are final` }] },
+  ];
+}
+
+async function answersFor(hireId: string, day: number, ts: string) {
+  const { data } = await db().from("live_events").select("target,preview")
+    .eq("hire_id", hireId).eq("action", `Day ${day} pulse answer`).like("target", `${ts}:%`)
+    .order("created_at", { ascending: true });
   const answers: Record<string, number> = {};
-  for (const r of data ?? []) if (r.target) answers[r.target] = Number(r.preview);
+  for (const r of data ?? []) answers[String(r.target).split(":")[1]] = Number(r.preview);
   return answers;
 }
