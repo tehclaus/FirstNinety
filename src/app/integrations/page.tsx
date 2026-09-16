@@ -27,7 +27,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
     <>
       <PageHeader
         title="Integrations log"
-        subtitle="Everything FirstNinety sends on your behalf. In demo mode these are simulated — open any entry to preview the exact Slack message, email or calendar invite."
+        subtitle="Everything Ramp90 sends on your behalf. In demo mode these are simulated — open any entry to preview the exact Slack message, email or calendar invite."
       />
       <div className="mb-5 flex flex-wrap items-center gap-2 text-sm">
         <Link href={href()} className={`rounded-full border px-3 py-1 ${!channel ? "border-accent bg-accent-soft text-accent" : "border-line text-ink-2"}`}>All</Link>

@@ -7,7 +7,7 @@ import { company } from "@/lib/demo-data";
 
 
 export const metadata: Metadata = {
-  title: "FirstNinety — Onboarding Orchestrator",
+  title: "Ramp90 — Onboarding Orchestrator",
   description: "AI-assisted 30/60/90 onboarding with Slack, Google Calendar, Gmail and Notion. A People & Culture portfolio project.",
 };
 

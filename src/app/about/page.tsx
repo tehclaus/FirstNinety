@@ -6,7 +6,7 @@ export default function AboutPage() {
     <article className="mx-auto max-w-2xl leading-relaxed">
       <div className="text-xs font-medium uppercase tracking-wide text-accent">Case study</div>
       <h1 className="mt-2 text-3xl font-semibold tracking-tight">Onboarding is not a checklist. It’s a managed path to productivity.</h1>
-      <p className="mt-4 text-ink-2">FirstNinety is a portfolio project by a People &amp; Culture leader: an onboarding orchestrator that automates the busywork and gives HR Business Partners an early-warning system for the first 90 days.</p>
+      <p className="mt-4 text-ink-2">Ramp90 is a portfolio project by a People &amp; Culture leader: an onboarding orchestrator that automates the busywork and gives HR Business Partners an early-warning system for the first 90 days.</p>
 
       <h2 className={h2}>The problem</h2>
       <ul className="mt-3 list-disc space-y-2 pl-5 text-ink-2">
@@ -38,7 +38,7 @@ export default function AboutPage() {
       <p className="mt-3 text-ink-2">Next.js on Vercel · Supabase (Postgres) · LLM via API · Google Calendar &amp; Gmail APIs · Slack app with Block Kit · Notion API. Designed and vibe-coded with Claude.</p>
 
       <h2 className={h2}>Roadmap</h2>
-      <p className="mt-3 text-ink-2">FirstNinety is module 1 of 3: <b className="text-ink">Onboarding</b> → <b className="text-ink">Performance &amp; Calibration</b> → <b className="text-ink">Org Health</b>. Checkpoint data from onboarding becomes an input for performance and organisational health signals.</p>
+      <p className="mt-3 text-ink-2">Ramp90 is module 1 of 3: <b className="text-ink">Onboarding</b> → <b className="text-ink">Performance &amp; Calibration</b> → <b className="text-ink">Org Health</b>. Checkpoint data from onboarding becomes an input for performance and organisational health signals.</p>
 
       <div className="mt-10 flex gap-3">
         <Link href="/" className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white">Explore the demo</Link>

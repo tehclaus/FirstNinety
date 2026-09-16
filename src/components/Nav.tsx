@@ -17,7 +17,7 @@ export function Nav() {
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
         <Link href="/" className="flex items-center gap-2 font-semibold">
           <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-sm text-white">90</span>
-          FirstNinety
+          Ramp90
         </Link>
         <nav className="flex flex-wrap gap-1 text-sm">
           {links.map((l) => {

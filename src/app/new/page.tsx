@@ -59,7 +59,7 @@ export default function NewHirePage() {
 
   return (
     <>
-      <PageHeader title="New hire" subtitle="Enter the basics — FirstNinety drafts a personalised pre-boarding checklist, Week 1 schedule and 30/60/90 goals. You review, edit, then launch the automations." />
+      <PageHeader title="New hire" subtitle="Enter the basics — Ramp90 drafts a personalised pre-boarding checklist, Week 1 schedule and 30/60/90 goals. You review, edit, then launch the automations." />
 
       <form onSubmit={generate} className="card grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
         <label className="text-sm sm:col-span-2">Full name<input required className={field} value={f.name} onChange={set("name")} /></label>

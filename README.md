@@ -1,4 +1,4 @@
-# FirstNinety — Onboarding Orchestrator (30/60/90)
+# Ramp90 — Onboarding Orchestrator (30/60/90)
 
 AI-assisted onboarding for People teams: personalised 30/60/90 plans, automated logistics across Google Calendar, Gmail, Slack and Notion, and day-30/60/90 checkpoints that flag the gap between how managers and new hires see the first months.
 
