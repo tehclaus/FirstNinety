@@ -13,7 +13,7 @@ export function liveConfigured() {
 
 export function db() {
   if (!client) {
-    const url = process.env.SUPABASE_URL;
+    const url = process.env.SUPABASE_URL?.trim().replace(/\/rest\/v1\/?$/, "").replace(/\/+$/, "");
     const key = process.env.SUPABASE_SECRET_KEY;
     if (!url || !key) throw new Error("Supabase is not configured (SUPABASE_URL / SUPABASE_SECRET_KEY)");
     client = createClient(url, key, { auth: { persistSession: false } });
