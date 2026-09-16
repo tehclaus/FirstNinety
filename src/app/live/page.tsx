@@ -6,6 +6,7 @@ import type { Flag } from "@/lib/types";
 import { LaunchForm, LoginForm } from "./Forms";
 import { deleteHireAction } from "./actions";
 import { PulseButton } from "./PulseButton";
+import { LocalTime } from "./LocalTime";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Live mode — Ramp90", robots: { index: false } };
@@ -49,7 +50,7 @@ export default async function LivePage() {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="font-semibold">{h.name}</div>
-                  <div className="text-sm text-ink-2">{h.grade} {templateByKey(h.template).role} · {h.location} ({h.work_mode}) · starts {h.start_date} · manager {h.manager} · buddy {h.buddy}</div>
+                  <div className="text-sm text-ink-2">{h.grade} {templateByKey(h.template).role} · {h.location} ({h.work_mode}) · starts {new Date(`${h.start_date}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" })} · manager {h.manager} · buddy {h.buddy}</div>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {[30, 60, 90].map((d) => {
@@ -82,7 +83,7 @@ export default async function LivePage() {
                   <li key={e.id} className="flex gap-3 py-2">
                     <span className={e.status === "ok" ? "text-good" : e.status === "error" ? "text-crit" : "text-muted"}>{e.status === "ok" ? "✓" : e.status === "error" ? "✕" : "–"}</span>
                     <span className="flex-1">{e.action}{e.error && <span className="text-crit"> — {e.error}</span>}</span>
-                    <span className="text-xs text-muted tabular-nums">{new Date(e.created_at).toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })}</span>
+                    <span className="text-xs text-muted tabular-nums"><LocalTime iso={e.created_at} /></span>
                   </li>
                 ))}
               </ul>
